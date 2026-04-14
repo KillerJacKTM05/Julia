@@ -5,7 +5,7 @@ import queue
 import json
 import os
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from customtkinter import filedialog
 from moe_router import MoERouter 
 
@@ -33,7 +33,7 @@ class UnityOracleUI(ctk.CTk):
         threading.Thread(target=self.initialize_router, daemon=True).start()
         threading.Thread(target=self.setup_tray_icon, daemon=True).start()
 
-    # --- 1. Background Initialization ---
+    # Background Initialization
     def initialize_router(self):
         self.append_text("System: Booting Knowledge Base...\n", "System")
         self.router = MoERouter()
@@ -41,20 +41,34 @@ class UnityOracleUI(ctk.CTk):
         self.load_history()
 
     def setup_tray_icon(self):
-        """Creates the system tray icon in the hidden icons menu."""
-        # Generate a simple blue icon with "UO" text
-        image = Image.new('RGB', (64, 64), color='#1f538d')
+        image = Image.new('RGBA', (64, 64), (20, 30, 50, 255))
         draw = ImageDraw.Draw(image)
-        draw.text((15, 20), "UO", fill="white")
+        # Outer eye (ellipse)
+        draw.ellipse((8, 20, 56, 44), outline="white", width=3)
+        # Inner iris
+        draw.ellipse((24, 26, 40, 42), fill="white")
+        # Pupil
+        draw.ellipse((28, 30, 36, 38), fill=(20, 30, 50))
+        
+        # Load a serif font (replace with actual path)
+        font = ImageFont.truetype("DejaVuSerif-Bold.ttf", 36)
+        text = "O"
+        # Get exact bounding box
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        # Center it
+        position = ((64 - w) // 2, (64 - h) // 2)
+        draw.text(position, text, fill="white", font=font)
         
         menu = pystray.Menu(
-            pystray.MenuItem("Show Oracle", lambda: self.after(0, self.force_show)),
-            pystray.MenuItem("Quit", lambda: self.after(0, self.quit_app))
+            pystray.MenuItem("Show Oracle", lambda: self.token_queue.put(("[SHOW]", "Command"))),
+            pystray.MenuItem("Quit", lambda: self.token_queue.put(("[QUIT]", "Command")))
         )
         self.tray_icon = pystray.Icon("UnityOracle", image, "Unity Oracle", menu)
         self.tray_icon.run()
 
-    # --- 2. Building the UI ---
+    # Building the UI
     def build_ui(self):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -124,7 +138,7 @@ class UnityOracleUI(ctk.CTk):
         self.btn_send = ctk.CTkButton(self.input_frame, text="Send", width=60, height=40, command=self.send_message)
         self.btn_send.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="n")
 
-    # --- 3. Input & Threading Handling ---
+    # Input & Threading Handling
     def clear_placeholder(self, event):
         if "Ask the Oracle" in self.input_box.get("0.0", "end"):
             self.input_box.delete("0.0", "end")
@@ -188,10 +202,10 @@ class UnityOracleUI(ctk.CTk):
         # Get full answer while streaming to UI
         full_answer = self.router.chat(user_text, image_path=image_path, stream_callback=self.handle_stream)
         
-        self.token_queue.put(("\n\n", "System"))
+        # Add a clean closing message so you know it's done
+        self.token_queue.put(("\n\n[System: Task Completed]\n\n", "System"))
         self.token_queue.put(("[DONE]", "Command")) # Signal to stop progress bar
         
-        # CLEAN JSON FIX: Append massive text blocks, not letters
         self.history_data.append({"role": "User", "text": display_text})
         self.history_data.append({"role": "Oracle", "text": f"Oracle: {full_answer}\n"})
         self.save_history()
@@ -204,10 +218,18 @@ class UnityOracleUI(ctk.CTk):
         while not self.token_queue.empty():
             token, tag = self.token_queue.get()
             
-            # Catch the progress bar command
-            if token == "[DONE]":
-                self.progress.stop()
-                self.progress.grid_remove()
+            # Catch background commands safely on the main UI thread
+            if tag == "Command":
+                if token == "[DONE]":
+                    self.progress.stop()
+                    self.progress.grid_remove()
+                    self.is_thinking = False
+                elif token == "[TOGGLE]":
+                    self.toggle_window()
+                elif token == "[SHOW]":
+                    self.force_show()
+                elif token == "[QUIT]":
+                    self.quit_app()
                 continue
                 
             self._insert_text(token, tag)
@@ -223,9 +245,10 @@ class UnityOracleUI(ctk.CTk):
     def append_text(self, text, tag):
         self.token_queue.put((text, tag))
 
-    # --- 4. System Logic & Modals ---
+    # System Logic & Modals
     def setup_hotkey(self):
-        keyboard.add_hotkey('ctrl+alt+l', self.toggle_window)
+        # Drop a toggle command into the queue
+        keyboard.add_hotkey('ctrl+alt+l', lambda: self.token_queue.put(("[TOGGLE]", "Command")))
 
     def toggle_window(self):
         if self.state() == "withdrawn":
@@ -246,18 +269,65 @@ class UnityOracleUI(ctk.CTk):
 
     def open_settings(self):
         settings_window = ctk.CTkToplevel(self)
-        settings_window.title("Settings")
-        settings_window.geometry("300x200")
+        settings_window.title("Oracle Core Settings")
+        settings_window.geometry("550x650")
         settings_window.attributes('-topmost', True)
         
-        lbl = ctk.CTkLabel(settings_window, text="Application Settings", font=("Arial", 16, "bold"))
-        lbl.pack(pady=20)
-        
-        btn_theme = ctk.CTkButton(settings_window, text="Toggle Theme (Dark/Light)", 
-                                  command=lambda: ctk.set_appearance_mode("Light" if ctk.get_appearance_mode() == "Dark" else "Dark"))
-        btn_theme.pack(pady=10)
+        # 1. Always On Top Toggle
+        self.always_on_top = getattr(self, 'always_on_top', False)
+        def toggle_top():
+            self.always_on_top = not self.always_on_top
+            self.attributes('-topmost', self.always_on_top)
+            
+        sw_top = ctk.CTkSwitch(settings_window, text="Pin Window Above Unity", command=toggle_top)
+        sw_top.pack(pady=(20, 10), padx=20, anchor="w")
+        if self.always_on_top: sw_top.select()
 
-    # --- 5. Clean Memory Management ---
+        # 2. RAM Safety Threshold Slider
+        lbl_ram = ctk.CTkLabel(settings_window, text="Heavy Advisor RAM Threshold (GB):", font=("Arial", 12, "bold"))
+        lbl_ram.pack(padx=20, anchor="w")
+        
+        ram_val_label = ctk.CTkLabel(settings_window, text="")
+        ram_val_label.pack(padx=20, anchor="w")
+        
+        ram_slider = ctk.CTkSlider(settings_window, from_=10, to=40, number_of_steps=30)
+        ram_slider.pack(fill="x", padx=20, pady=5)
+        
+        if hasattr(self, 'router'):
+            ram_slider.set(self.router.ram_threshold_gb)
+            ram_val_label.configure(text=f"Current: {self.router.ram_threshold_gb} GB")
+            
+        def update_ram(value):
+            if hasattr(self, 'router'):
+                self.router.ram_threshold_gb = round(float(value), 1)
+                ram_val_label.configure(text=f"Current: {self.router.ram_threshold_gb} GB")
+        ram_slider.configure(command=update_ram)
+
+        # 3. Dynamic Prompt Editors
+        lbl_g_prompt = ctk.CTkLabel(settings_window, text="Front-Hand (Gemma) System Prompt:", font=("Arial", 12, "bold"))
+        lbl_g_prompt.pack(pady=(20, 5), padx=20, anchor="w")
+        txt_g_prompt = ctk.CTkTextbox(settings_window, height=100, wrap="word")
+        txt_g_prompt.pack(fill="x", padx=20)
+        if hasattr(self, 'router'): txt_g_prompt.insert("0.0", self.router.gemma_system_prompt)
+
+        lbl_q_prompt = ctk.CTkLabel(settings_window, text="Advisor (Qwen) System Prompt:", font=("Arial", 12, "bold"))
+        lbl_q_prompt.pack(pady=(20, 5), padx=20, anchor="w")
+        txt_q_prompt = ctk.CTkTextbox(settings_window, height=100, wrap="word")
+        txt_q_prompt.pack(fill="x", padx=20)
+        if hasattr(self, 'router'): txt_q_prompt.insert("0.0", self.router.qwen_system_prompt)
+
+        # Save Button
+        def save_settings():
+            if hasattr(self, 'router'):
+                self.router.gemma_system_prompt = txt_g_prompt.get("0.0", "end").strip()
+                self.router.qwen_system_prompt = txt_q_prompt.get("0.0", "end").strip()
+            settings_window.destroy()
+            self.append_text("System: Core Settings Updated.\n\n", "System")
+
+        btn_save = ctk.CTkButton(settings_window, text="Apply & Save", fg_color="#2ECC71", hover_color="#27AE60", command=save_settings)
+        btn_save.pack(pady=20)
+
+    # Clean Memory Management
     def save_history(self):
         with open(self.chat_history_file, 'w', encoding='utf-8') as f:
             json.dump(self.history_data, f, indent=4)
