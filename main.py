@@ -13,17 +13,17 @@ from audio_engine import AudioEngine
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-class UnityOracleUI(ctk.CTk):
+class UnityJuliaUI(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Unity Oracle (MoE)")
+        self.title("Julia (MoE)")
         self.geometry("900x650")
         self.minsize(600, 500)
         
         self.chat_history_file = "chat_history.json"
         self.token_queue = queue.Queue()
-        self.history_data = [] # Stores clean {"role": "User/Oracle", "text": "..."} blocks
+        self.history_data = [] # Stores clean {"role": "User/Julia", "text": "..."} blocks
         self.is_thinking = False
         # Audio State Variables
         self.tts_enabled = False
@@ -41,7 +41,7 @@ class UnityOracleUI(ctk.CTk):
     def initialize_router(self):
         self.append_text("System: Booting Knowledge Base...\n", "System")
         self.router = MoERouter()
-        self.append_text("System: Oracle is Ready. Press Ctrl+Alt+L to toggle.\n\n", "System")
+        self.append_text("System: Julia is Ready. Press Ctrl+Alt+L to toggle.\n\n", "System")
         self.load_history()
 
     def setup_tray_icon(self):
@@ -56,7 +56,7 @@ class UnityOracleUI(ctk.CTk):
         
         # Load a serif font (replace with actual path)
         font = ImageFont.truetype("C:/Windows/Fonts/COPRGTL.TTF", 36)
-        text = "O"
+        text = "J"
         # Get exact bounding box
         bbox = draw.textbbox((0, 0), text, font=font)
         w = bbox[2] - bbox[0]
@@ -66,10 +66,10 @@ class UnityOracleUI(ctk.CTk):
         draw.text(position, text, fill="white", font=font)
         
         menu = pystray.Menu(
-            pystray.MenuItem("Show Oracle", lambda: self.token_queue.put(("[SHOW]", "Command"))),
+            pystray.MenuItem("Show Julia", lambda: self.token_queue.put(("[SHOW]", "Command"))),
             pystray.MenuItem("Quit", lambda: self.token_queue.put(("[QUIT]", "Command")))
         )
-        self.tray_icon = pystray.Icon("UnityOracle", image, "Unity Oracle", menu)
+        self.tray_icon = pystray.Icon("Julia", image, "Julia", menu)
         self.tray_icon.run()
 
     # Building the UI
@@ -142,7 +142,7 @@ class UnityOracleUI(ctk.CTk):
         self.input_box = ctk.CTkTextbox(self.input_frame, height=60, wrap="word", font=("Arial", 14))
         self.input_box.grid(row=0, column=2, sticky="ew", padx=5, pady=10)
         
-        self.input_box.insert("0.0", "Ask the Oracle... (Shift+Enter for new line)")
+        self.input_box.insert("0.0", "Ask Julia... (Shift+Enter for new line)")
         self.input_box.bind("<FocusIn>", self.clear_placeholder)
         self.input_box.bind("<Return>", self.handle_return)
         self.input_box.bind("<Shift-Return>", self.handle_shift_return)
@@ -153,7 +153,7 @@ class UnityOracleUI(ctk.CTk):
 
     # Input & Threading Handling
     def clear_placeholder(self, event):
-        if "Ask the Oracle" in self.input_box.get("0.0", "end"):
+        if "Ask the Julia" in self.input_box.get("0.0", "end"):
             self.input_box.delete("0.0", "end")
 
     def handle_return(self, event):
@@ -210,12 +210,12 @@ class UnityOracleUI(ctk.CTk):
         threading.Thread(target=self.run_ai, args=(user_text, image_to_send, display_text), daemon=True).start()
 
     def run_ai(self, user_text, image_path, display_text):
-        self.token_queue.put(("Oracle: ", "System"))
+        self.token_queue.put(("Julia: ", "System"))
         
         # Get full answer while streaming to UI
         full_answer = self.router.chat(user_text, image_path=image_path, stream_callback=self.handle_stream)
         
-        # Make Oracle speak if enabled
+        # Make Julia speak if enabled
         if getattr(self, 'tts_enabled', False):
             self.audio.speak(full_answer)
             
@@ -224,7 +224,7 @@ class UnityOracleUI(ctk.CTk):
         self.token_queue.put(("[DONE]", "Command")) # Signal to stop progress bar
         
         self.history_data.append({"role": "User", "text": display_text})
-        self.history_data.append({"role": "Oracle", "text": f"Oracle: {full_answer}\n"})
+        self.history_data.append({"role": "Julia", "text": f"Julia: {full_answer}\n"})
         self.save_history()
         self.token_queue.put(("[REFRESH_HISTORY]", "Command"))
         
@@ -324,7 +324,7 @@ class UnityOracleUI(ctk.CTk):
 
     def open_settings(self):
         settings_window = ctk.CTkToplevel(self)
-        settings_window.title("Oracle Core Settings")
+        settings_window.title("Julia Core Settings")
         settings_window.geometry("550x750")
         settings_window.attributes('-topmost', True)
         
@@ -377,7 +377,7 @@ class UnityOracleUI(ctk.CTk):
 
         def toggle_tts():
             self.tts_enabled = not getattr(self, 'tts_enabled', False)
-        sw_tts = ctk.CTkSwitch(settings_window, text="Oracle Speaks Answers (TTS)", command=toggle_tts)
+        sw_tts = ctk.CTkSwitch(settings_window, text="Julia Speaks Answers (TTS)", command=toggle_tts)
         sw_tts.pack(pady=5, padx=20, anchor="w")
         if getattr(self, 'tts_enabled', False): sw_tts.select()
         
@@ -451,10 +451,10 @@ class UnityOracleUI(ctk.CTk):
         user_msg = self.history_data[index]
         self.chat_display.insert("end", user_msg["text"], "User")
         
-        # Try to find and insert the Oracle's answer that immediately followed
-        if index + 1 < len(self.history_data) and self.history_data[index + 1]["role"] == "Oracle":
-            oracle_msg = self.history_data[index + 1]
-            self.chat_display.insert("end", oracle_msg["text"], "Qwen (Advisor + RAG)")
+        # Try to find and insert the Julia's answer that immediately followed
+        if index + 1 < len(self.history_data) and self.history_data[index + 1]["role"] == "Julia":
+            Julia_msg = self.history_data[index + 1]
+            self.chat_display.insert("end", Julia_msg["text"], "Qwen (Advisor + RAG)")
             
         self.chat_display.configure(state="disabled")
         self.append_text("\n[System: Viewing past conversation]\n\n", "System")
@@ -469,5 +469,5 @@ class UnityOracleUI(ctk.CTk):
         self.append_text("System: History Cleared.\n\n", "System")
 
 if __name__ == "__main__":
-    app = UnityOracleUI()
+    app = UnityJuliaUI()
     app.mainloop()

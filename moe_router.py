@@ -5,7 +5,7 @@ from rag_pipeline import KnowledgeBase
 class MoERouter:
     def __init__(self):
         self.front_model = "gemma4:e4b"
-        self.heavy_advisor = "qwen3.5:35b-a3b"
+        self.heavy_advisor = "qwen3.6:35b-a3b"
         self.safe_advisor = "qwen3.5:9b"
         
         self.ram_threshold_gb = 25.0 
@@ -13,12 +13,12 @@ class MoERouter:
         print("Initializing Knowledge Base...")
         self.rag_db = KnowledgeBase()
         
-        self.gemma_system_prompt = """You are a part of Oracle, in the role of fast, front-line Unity C# assistant. 
+        self.gemma_system_prompt = """You are speaker part of personal assistant Julia, in the role of fast, front-line Unity C# assistant. 
 Your job is to answer simple syntax, UI, and basic scripting questions. You can analyze images if provided.
 If the user asks a complex architectural question, requires deep documentation, or if you are unsure, reply EXACTLY with: <ESCALATE>
 so, you will be able to ask your supervisor and it will try to give answer. You can also learn from that."""
 
-        self.qwen_system_prompt = """You are a part of Oracle, the role of Senior Unity Architect. You step in when the front-line model is unsure. 
+        self.qwen_system_prompt = """You are advisor part of personal assistant Julia, the role of Senior Unity Architect. You step in when the front-line model is unsure. 
 You will be provided with context from the official Unity documentation. 
 Use the context to provide a highly detailed, perfectly structured, and accurate answer."""
 

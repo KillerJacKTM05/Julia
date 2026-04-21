@@ -71,7 +71,7 @@ class AudioEngine:
         with mic as source:
             print("[Audio] Calibrating mic to room noise...")
             self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
-            print("[Audio] Ready. Say 'Oracle' to wake...")
+            print("[Audio] Ready. Say 'Julia' to wake...")
             
         while self.is_listening:
             try:
@@ -91,7 +91,7 @@ class AudioEngine:
                 
                 text = self.recognizer.recognize_google(audio).lower()
                 
-                if "oracle" in text:
+                if "Julia" in text:
                     print(f"[Heard Wake]: {text}") 
                     self.speak(self.wake_response)
                     self.ui_callback("[SHOW_UI]") 
@@ -101,7 +101,7 @@ class AudioEngine:
                         time.sleep(0.2)
                     
                     with mic as source:
-                        print("[Audio] Oracle awake. Listening for query...")
+                        print("[Audio] Julia awake. Listening for query...")
                         # FIX: phrase_time_limit=None lets you talk as long as you want
                         audio_cmd = self.recognizer.listen(source, timeout=5, phrase_time_limit=None)
                     self._process_recorded_audio(audio_cmd)
