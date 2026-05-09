@@ -21,7 +21,8 @@ class AudioEngine:
         
         self.recognizer = sr.Recognizer()
         self.recognizer.pause_threshold = 1.5 
-        self.recognizer.dynamic_energy_threshold = True 
+        self.recognizer.dynamic_energy_threshold = False
+        self.recognizer.energy_threshold = 300
 
     def _tts_worker(self):
         import pythoncom
@@ -69,71 +70,82 @@ class AudioEngine:
     def _audio_loop(self):
         mic = sr.Microphone()
         with mic as source:
-            print("[Audio] Calibrating mic to room noise...")
+            print("\n[System] Calibrating microphone...")
             self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
-            print("[Audio] Ready. Say 'Julia' to wake...")
+            print("[System] Ready. Waiting for wake word 'Julia'.\n")
             
         while self.is_listening:
             try:
-                # Continuous Conversation Bypass
-                if self.awaiting_followup:
-                    print("[Audio] Follow-up window open. Speak now...")
-                    with mic as source:
-                        # FIX: phrase_time_limit=None lets you talk as long as you want
-                        audio_cmd = self.recognizer.listen(source, timeout=10, phrase_time_limit=None)
-                    self.awaiting_followup = False 
-                    self._process_recorded_audio(audio_cmd)
-                    continue
-
-                # Standard Wake Word Mode
+                # Passive background listening
                 with mic as source:
                     audio = self.recognizer.listen(source, timeout=2, phrase_time_limit=4)
                 
                 text = self.recognizer.recognize_google(audio).lower()
+                print(f"[Passive]: {text}") 
                 
-                if "Julia" in text:
-                    print(f"[Heard Wake]: {text}") 
+                if "julia" in text:
+                    print("\n*** WAKE WORD DETECTED ***") 
                     self.speak(self.wake_response)
                     self.ui_callback("[SHOW_UI]") 
                     
-                    # FIX: Wait patiently for the TTS to finish saying "Yes?"
                     while self.tts_busy.is_set():
                         time.sleep(0.2)
                     
-                    with mic as source:
-                        print("[Audio] Julia awake. Listening for query...")
-                        # FIX: phrase_time_limit=None lets you talk as long as you want
-                        audio_cmd = self.recognizer.listen(source, timeout=5, phrase_time_limit=None)
-                    self._process_recorded_audio(audio_cmd)
+                    print(">>> [Dictation OPEN] Speak naturally. Say 'stop listening' to close mic.")
+                    
+                    # Dictation Loop: Capture and stream chunks instantly
+                    while True:
+                        try:
+                            with mic as source:
+                                audio_chunk = self.recognizer.listen(source, timeout=3, phrase_time_limit=10)
+                                
+                            chunk_text = self.recognizer.recognize_google(audio_chunk).lower()
+                            print(f"[Dictated]: {chunk_text}")
+                            
+                            # Check for the kill-switch phrase
+                            if "stop listening" in chunk_text or "end of message" in chunk_text:
+                                clean_chunk = chunk_text.replace("stop listening", "").replace("end of message", "").strip()
+                                if clean_chunk:
+                                    self.ui_callback(f"[APPEND_INPUT] {clean_chunk}")
+                                    
+                                print(">>> [Dictation Closed] Returning to passive state.\n")
+                                break # Terminate dictation mode
+                                
+                            # Stream the chunk directly to the UI immediately
+                            self.ui_callback(f"[APPEND_INPUT] {chunk_text}")
+                            
+                        except sr.WaitTimeoutError:
+                            # User paused to think. Continue looping.
+                            continue
+                        except sr.UnknownValueError:
+                            continue
+                        except Exception as e:
+                            print(f"[Dictation Error]: {e}")
+                            break
                             
             except sr.WaitTimeoutError:
-                if self.awaiting_followup:
-                    print("[Audio] Follow-up window closed.")
-                    self.awaiting_followup = False
                 continue 
             except sr.UnknownValueError:
                 continue 
-            except Exception as e:
-                print(f"[Audio Error]: {e}")
+            except Exception:
+                pass
 
-    def _process_recorded_audio(self, audio_data):
-        try:
-            query = self.recognizer.recognize_google(audio_data).lower()
-            print(f"[Heard Query]: {query}")
-            
-            if "new chat" in query:
-                self.speak("Starting fresh.")
-                self.ui_callback("[CMD_NEW_CHAT]")
-            elif "clear" in query or "delete" in query:
-                self.speak("History wiped.")
-                self.ui_callback("[CMD_CLEAR_CHAT]")
-            elif "close" in query or "hide" in query:
-                self.speak("Going to sleep.")
-                self.ui_callback("[CMD_HIDE]")
-            else:
-                self.ui_callback(query)
-        except sr.UnknownValueError:
-            print("[Audio] Could not understand audio.")
+    def _process_recorded_audio(self, text):
+        print(f"\n[FINAL DICTATION]: \"{text}\"\n")
+        
+        # Note: Length checks added to prevent accidental system commands if dictated during a long sentence.
+        if "new chat" in text and len(text) < 15:
+            self.speak("Starting fresh.")
+            self.ui_callback("[CMD_NEW_CHAT]")
+        elif ("clear" in text or "delete" in text) and len(text) < 15:
+            self.speak("History wiped.")
+            self.ui_callback("[CMD_CLEAR_CHAT]")
+        elif ("close" in text or "hide" in text) and len(text) < 15:
+            self.speak("Going to sleep.")
+            self.ui_callback("[CMD_HIDE]")
+        else:
+            # Route standard dictated text to the UI input box instead of auto-sending
+            self.ui_callback(f"[FILL_INPUT] {text}")
 
     def start_listening(self):
         if not self.is_listening:
